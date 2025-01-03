@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-100 py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
-      <h1 class="text-3xl font-bold text-center text-gray-900 mb-6">Upload Image</h1>
+      <h1 class="text-3xl font-bold text-center text-gray-900 mb-6">⭐数学公式OCR</h1>
       <div class="flex flex-col items-center space-y-4">
         <!-- 文件选择 -->
         <input
@@ -42,9 +42,9 @@
         </div>
 
         <!-- OCR 结果 -->
-        <div v-if="ocrResultText" class="mt-4 p-4 bg-gray-50 rounded-md">
+        <div v-if="ocrResultText" class="mt-4 p-4 bg-gray-50 rounded-md w-full overflow-auto">
           <h2 class="text-lg font-semibold text-gray-900">OCR 结果</h2>
-          <pre class="mt-2 text-gray-700 whitespace-pre-wrap">{{ ocrResultText }}</pre>
+          <pre class="mt-2 text-gray-700 whitespace-pre-wrap text-left">{{ ocrResultText }}</pre>
         </div>
       </div>
     </div>
