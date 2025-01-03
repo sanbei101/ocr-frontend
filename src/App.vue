@@ -62,6 +62,8 @@ const selectedFile = ref<File | null>(null);
 const isUploading = ref(false);
 const uploadResult = ref<{ success: boolean; message: string } | null>(null);
 const imageUrl = ref<string | null>(null);
+const ocrResultText = ref<string>('');
+const abortController = ref<AbortController | null>(null);
 
 const handleFileChange = (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0];
@@ -70,6 +72,9 @@ const handleFileChange = (e: Event) => {
     imageUrl.value = URL.createObjectURL(file);
     isUploading.value = false;
     uploadResult.value = null;
+    if (abortController.value) {
+      abortController.value.abort();
+    }
     ocrResultText.value = '';
   }
 };
@@ -94,48 +99,65 @@ const handleSubmit = async () => {
       message: error instanceof Error ? error.message : '上传失败'
     };
   } finally {
-    console.log(`${ossPublicUrl}/${selectedFile.value.name}`);
     await getOCRResult(`${ossPublicUrl}/${selectedFile.value.name}`);
     isUploading.value = false;
   }
 };
 
-const ocrResultText = ref<string>('');
-const getOCRResult = async (imageUrl: string) => {
+// 获取 OCR 结果
+const getOCRResult = async (imageUrl: string): Promise<void> => {
+  abortController.value = new AbortController();
   try {
-    const response = await openai.chat.completions.create({
-      model: 'qwen-vl-plus',
-      messages: [
-        {
-          role: 'system',
-          content: `你是一个数学latex大师,
-                现在需要你识别用户的图片中的数学题目,
-                其中的数学公式以latex的形式返回,
-                请注意你只需要给出题目的内容,
-                不能有解释,以及任意的其他的文字`
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: {
-                url: imageUrl
-              }
-            }
-          ]
-        }
-      ],
-      stream: true
-    });
+    const response = await openai.chat.completions.create(
+      {
+        model: 'qwen-vl-plus',
+        messages: [
+          {
+            role: 'system',
+            content: `你是一个数学latex大师,
+                    现在需要你识别用户的图片中的数学题目,
+                    其中的数学公式以latex的形式返回,
+                    请注意你只需要给出题目的内容,
+                    不能有任意解答,任意的注释,任意的无关内容`
+          },
+          {
+            role: 'user',
 
+            content: [
+              {
+                type: 'text',
+                text: '你只需要给我题目的内容!不需要废话,不需要解答,不需要注释!'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageUrl
+                }
+              }
+            ]
+          }
+        ],
+        stream: true
+      },
+      {
+        signal: abortController.value.signal
+      }
+    );
+
+    // 逐步处理 OCR 请求返回的内容
     for await (const part of response) {
       if (part.choices[0]?.delta?.content) {
         ocrResultText.value += part.choices[0].delta.content;
       }
     }
   } catch (error) {
-    console.error('OCR请求失败', error);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      console.log('OCR 请求已中止');
+    } else {
+      console.error('OCR 请求失败', error);
+    }
+  } finally {
+    abortController.value = null;
   }
 };
 </script>
