@@ -42,9 +42,9 @@
         </div>
 
         <!-- OCR 结果 -->
-        <div v-if="ocrResult" class="mt-4 p-4 bg-gray-50 rounded-md">
+        <div v-if="ocrResultText" class="mt-4 p-4 bg-gray-50 rounded-md">
           <h2 class="text-lg font-semibold text-gray-900">OCR 结果</h2>
-          <pre class="mt-2 text-gray-700 whitespace-pre-wrap">{{ ocrResult }}</pre>
+          <pre class="mt-2 text-gray-700 whitespace-pre-wrap">{{ ocrResultText }}</pre>
         </div>
       </div>
     </div>
@@ -53,7 +53,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import axios from 'axios';
+import { getSignedUrl, uploadFile } from './oss';
+import { openai } from './ocr';
+const ossPublicUrl = 'https://ocr-cdn.sanbei101.tech';
 
 // 响应式变量
 const selectedFile = ref<File | null>(null);
@@ -62,7 +64,6 @@ const uploadResult = ref<{ success: boolean; message: string } | null>(null);
 const imageUrl = ref<string | null>(null);
 const ocrResult = ref<string | null>(null);
 
-// 处理文件选择
 const handleFileChange = (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (file) {
@@ -93,26 +94,44 @@ const handleSubmit = async () => {
       message: error instanceof Error ? error.message : '上传失败'
     };
   } finally {
+    console.log(`${ossPublicUrl}/${selectedFile.value.name}`);
+    await getOCRResult(`${ossPublicUrl}/${selectedFile.value.name}`);
     isUploading.value = false;
   }
 };
 
-// 获取预签名的 URL
-const getSignedUrl = async (file: File) => {
-  const response = await axios.get(
-    'https://ocr-go-backend-ksglcimcak.cn-beijing.fcapp.run/get-presign',
-    {
-      params: { objectName: file.name }
-    }
-  );
-  if (!response.data.url) throw new Error('获取上传链接失败');
-  return { signedUrl: response.data.url };
-};
+const ocrResultText = ref<string>('');
+const getOCRResult = async (imageUrl: string) => {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'qwen-vl-plus',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: '你是一个数学latex大师,现在需要你识别出数学题目,其中的数学公式以latex的形式返回'
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: imageUrl
+              }
+            }
+          ]
+        }
+      ],
+      stream: true
+    });
 
-// 上传文件到OSS
-const uploadFile = async (file: File, signedUrl: string) => {
-  const fileBuffer = await file.arrayBuffer();
-  const response = await fetch(signedUrl, { method: 'PUT', body: fileBuffer });
-  if (!response.ok) throw new Error('上传过程中发生错误');
+    for await (const part of response) {
+      if (part.choices[0]?.delta?.content) {
+        ocrResultText.value += part.choices[0].delta.content;
+      }
+    }
+  } catch (error) {
+    console.error('OCR请求失败', error);
+  }
 };
 </script>
