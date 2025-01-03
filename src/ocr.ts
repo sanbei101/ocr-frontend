@@ -1,8 +1,8 @@
 import { OpenAI } from 'openai';
 
 export const openai = new OpenAI({
-  apiKey: 'sk-5102e47a882642078cc5b27fa4dfdbaf',
-  baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  apiKey: '1ae25bb0dd0246db8d1eac8616d00b21.mvFjvKXq1dT9r5k8',
+  baseURL: 'https://open.bigmodel.cn/api/paas/v4',
   dangerouslyAllowBrowser: true
 });
 

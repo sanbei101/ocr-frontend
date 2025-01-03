@@ -85,7 +85,7 @@ const handleSubmit = async () => {
     uploadResult.value = { success: false, message: '请选择文件' };
     return;
   }
-
+  ocrResultText.value = '';
   isUploading.value = true;
   uploadResult.value = null;
 
@@ -110,7 +110,7 @@ const getOCRResult = async (imageUrl: string): Promise<void> => {
   try {
     const response = await openai.chat.completions.create(
       {
-        model: 'qwen-vl-plus',
+        model: 'glm-4v-flash',
         messages: [
           {
             role: 'system',
