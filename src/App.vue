@@ -62,15 +62,15 @@ const selectedFile = ref<File | null>(null);
 const isUploading = ref(false);
 const uploadResult = ref<{ success: boolean; message: string } | null>(null);
 const imageUrl = ref<string | null>(null);
-const ocrResult = ref<string | null>(null);
 
 const handleFileChange = (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (file) {
     selectedFile.value = file;
     imageUrl.value = URL.createObjectURL(file);
+    isUploading.value = false;
     uploadResult.value = null;
-    ocrResult.value = null;
+    ocrResultText.value = '';
   }
 };
 
@@ -107,12 +107,16 @@ const getOCRResult = async (imageUrl: string) => {
       model: 'qwen-vl-plus',
       messages: [
         {
+          role: 'system',
+          content: `你是一个数学latex大师,
+                现在需要你识别用户的图片中的数学题目,
+                其中的数学公式以latex的形式返回,
+                请注意你只需要给出题目的内容,
+                不能有解释,以及任意的其他的文字`
+        },
+        {
           role: 'user',
           content: [
-            {
-              type: 'text',
-              text: '你是一个数学latex大师,现在需要你识别出数学题目,其中的数学公式以latex的形式返回'
-            },
             {
               type: 'image_url',
               image_url: {
