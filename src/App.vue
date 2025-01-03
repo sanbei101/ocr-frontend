@@ -14,15 +14,14 @@
         />
 
         <!-- 图片预览 -->
-        <div v-if="imageUrl" class="mt-4">
-          <img
-            :src="imageUrl"
-            alt="Preview"
-            class="rounded-lg"
-            width="300"
-            height="200"
-          />
-        </div>
+        <img
+          v-if="imageUrl"
+          :src="imageUrl"
+          alt="Preview"
+          class="mt-4 rounded-lg"
+          width="300"
+          height="200"
+        />
 
         <!-- 上传按钮 -->
         <button
@@ -68,43 +67,42 @@ import { ref } from "vue";
 import axios from "axios";
 
 // 响应式变量
-const selectedFile = ref<File | null>(null); // 更改名称，避免与类型冲突
-const isUploading = ref<boolean>(false);
+const selectedFile = ref<File | null>(null);
+const isUploading = ref(false);
 const uploadResult = ref<{ success: boolean; message: string } | null>(null);
 const imageUrl = ref<string | null>(null);
 const ocrResult = ref<string | null>(null);
 
 // 处理文件选择
 const handleFileChange = (e: Event) => {
-  const target = e.target as HTMLInputElement;
-  if (target.files && target.files[0]) {
-    selectedFile.value = target.files[0];
-    imageUrl.value = URL.createObjectURL(selectedFile.value); // 显示预览图片
-    uploadResult.value = null; // 重置上传结果
-    ocrResult.value = null; // 重置 OCR 结果
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (file) {
+    selectedFile.value = file;
+    imageUrl.value = URL.createObjectURL(file);
+    uploadResult.value = null;
+    ocrResult.value = null;
   }
-  console.log(imageUrl);
 };
 
 // 处理文件上传
 const handleSubmit = async () => {
   if (!selectedFile.value) {
-    console.error("No file selected");
     uploadResult.value = { success: false, message: "请选择文件" };
     return;
   }
 
   isUploading.value = true;
-  uploadResult.value = null; // 重置上传结果
+  uploadResult.value = null;
 
   try {
-    // 获取预签名 URL
     const { signedUrl } = await getSignedUrl(selectedFile.value);
-
-    uploadFile(selectedFile.value, signedUrl);
+    await uploadFile(selectedFile.value, signedUrl);
+    uploadResult.value = { success: true, message: "上传成功！" };
   } catch (error) {
-    console.error("Error during file upload:", error);
-    uploadResult.value = { success: false, message: error as string };
+    uploadResult.value = {
+      success: false,
+      message: error instanceof Error ? error.message : "上传失败",
+    };
   } finally {
     isUploading.value = false;
   }
@@ -112,55 +110,20 @@ const handleSubmit = async () => {
 
 // 获取预签名的 URL
 const getSignedUrl = async (file: File) => {
-  try {
-    // 请求服务端生成预签名 URL
-    const response = await axios.get(
-      "https://ocr-go-backend-ksglcimcak.cn-beijing.fcapp.run/get-presign",
-      {
-        params: {
-          objectName: file.name,
-        },
-      }
-    );
-
-    const { url: signedUrl } = response.data;
-
-    if (!signedUrl) {
-      throw new Error("Failed to get signed URL");
+  const response = await axios.get(
+    "https://ocr-go-backend-ksglcimcak.cn-beijing.fcapp.run/get-presign",
+    {
+      params: { objectName: file.name },
     }
-
-    return { signedUrl };
-  } catch (error) {
-    console.error("Error getting signed URL:", error);
-    throw new Error("获取上传链接失败");
-  }
+  );
+  if (!response.data.url) throw new Error("获取上传链接失败");
+  return { signedUrl: response.data.url };
 };
 
 // 上传文件到OSS
-const uploadFile = (file: File, signedUrl: string) => {
-  console.log("Uploading file in uploadFile:", file); // 调试日志
-
-  // 使用 FileReader 读取文件并通过回调上传
-  const reader = new FileReader();
-
-  reader.onloadend = function () {
-    const fileBuffer = reader.result as ArrayBuffer; // 获取读取到的 ArrayBuffer
-
-    fetch(signedUrl, {
-      method: "PUT",
-      body: fileBuffer,
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to upload file");
-        }
-        uploadResult.value = { success: true, message: "上传成功！" };
-      })
-      .catch((error) => {
-        console.error("Error uploading file:", error);
-        uploadResult.value = { success: false, message: "上传过程中发生错误" };
-      });
-  };
-  reader.readAsArrayBuffer(file);
+const uploadFile = async (file: File, signedUrl: string) => {
+  const fileBuffer = await file.arrayBuffer();
+  const response = await fetch(signedUrl, { method: "PUT", body: fileBuffer });
+  if (!response.ok) throw new Error("上传过程中发生错误");
 };
 </script>
