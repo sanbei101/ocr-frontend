@@ -55,27 +55,34 @@
 import { ref } from 'vue';
 import { getSignedUrl, uploadFile } from './oss';
 import { openai } from './ocr';
+
 const ossPublicUrl = 'https://ocr-cdn.sanbei101.tech';
 
-// 响应式变量
 const selectedFile = ref<File | null>(null);
 const isUploading = ref(false);
 const uploadResult = ref<{ success: boolean; message: string } | null>(null);
 const imageUrl = ref<string | null>(null);
 const ocrResultText = ref<string>('');
-const abortController = ref<AbortController | null>(null);
+let abortController: AbortController | null = null;
 
+// 处理文件选择
 const handleFileChange = (e: Event) => {
-  const file = (e.target as HTMLInputElement).files?.[0];
+  const file = (e.target as HTMLInputElement).files?.[0] || null;
   if (file) {
     selectedFile.value = file;
     imageUrl.value = URL.createObjectURL(file);
-    isUploading.value = false;
-    uploadResult.value = null;
-    if (abortController.value) {
-      abortController.value.abort();
-    }
-    ocrResultText.value = '';
+    resetState();
+  }
+};
+
+// 重置状态
+const resetState = () => {
+  isUploading.value = false;
+  uploadResult.value = null;
+  ocrResultText.value = '';
+  if (abortController) {
+    abortController.abort();
+    abortController = null;
   }
 };
 
@@ -85,28 +92,28 @@ const handleSubmit = async () => {
     uploadResult.value = { success: false, message: '请选择文件' };
     return;
   }
-  ocrResultText.value = '';
+
+  resetState();
   isUploading.value = true;
-  uploadResult.value = null;
 
   try {
     const { signedUrl } = await getSignedUrl(selectedFile.value);
     await uploadFile(selectedFile.value, signedUrl);
     uploadResult.value = { success: true, message: '上传成功！' };
-  } catch (error) {
+    await fetchOCRResult(`${ossPublicUrl}/${selectedFile.value.name}`);
+  } catch (error: any) {
     uploadResult.value = {
       success: false,
-      message: error instanceof Error ? error.message : '上传失败'
+      message: error?.message || '上传失败'
     };
   } finally {
-    await getOCRResult(`${ossPublicUrl}/${selectedFile.value.name}`);
     isUploading.value = false;
   }
 };
 
 // 获取 OCR 结果
-const getOCRResult = async (imageUrl: string): Promise<void> => {
-  abortController.value = new AbortController();
+const fetchOCRResult = async (imageUrl: string) => {
+  abortController = new AbortController();
   try {
     const response = await openai.chat.completions.create(
       {
@@ -115,49 +122,36 @@ const getOCRResult = async (imageUrl: string): Promise<void> => {
           {
             role: 'system',
             content: `你是一个数学latex大师,
-                    现在需要你识别用户的图片中的数学题目,
-                    其中的数学公式以latex的形式返回,
-                    请注意你只需要给出题目的内容,
-                    不能有任意解答,任意的注释,任意的无关内容`
+                      现在需要你识别用户的图片中的数学题目，
+                      其中的数学公式以latex的形式返回,
+                      请注意你只需要给出题目的内容，
+                      不能有任意解答,任意的注释,任意的无关内容。`
           },
           {
             role: 'user',
-
             content: [
-              {
-                type: 'text',
-                text: '你只需要给我题目的内容!不需要废话,不需要解答,不需要注释!'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: imageUrl
-                }
-              }
+              { type: 'text', text: '你只需要给我题目的内容!不需要废话,不需要解答,不需要注释!' },
+              { type: 'image_url', image_url: { url: imageUrl } }
             ]
           }
         ],
         stream: true
       },
-      {
-        signal: abortController.value.signal
-      }
+      { signal: abortController.signal }
     );
 
-    // 逐步处理 OCR 请求返回的内容
     for await (const part of response) {
-      if (part.choices[0]?.delta?.content) {
-        ocrResultText.value += part.choices[0].delta.content;
+      const content = part.choices?.[0]?.delta?.content;
+      if (content) {
+        ocrResultText.value += content;
       }
     }
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      console.log('OCR 请求已中止');
-    } else {
+  } catch (error: any) {
+    if (error.name !== 'AbortError') {
       console.error('OCR 请求失败', error);
     }
   } finally {
-    abortController.value = null;
+    abortController = null;
   }
 };
 </script>
