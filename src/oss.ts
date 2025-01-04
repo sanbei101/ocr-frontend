@@ -1,14 +1,14 @@
 import axios from 'axios';
 // 获取预签名的 URL
-export const getSignedUrl = async (file: File) => {
+export const getSignedUrl = async (fileName: string): Promise<string> => {
   const response = await axios.get(
     'https://ocr-go-backend-ksglcimcak.cn-beijing.fcapp.run/get-presign',
     {
-      params: { objectName: file.name }
+      params: { objectName: fileName }
     }
   );
   if (!response.data.url) throw new Error('获取上传链接失败');
-  return { signedUrl: response.data.url };
+  return response.data.url as string;
 };
 
 // 上传文件到OSS
