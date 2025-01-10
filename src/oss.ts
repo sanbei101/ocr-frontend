@@ -2,7 +2,7 @@ import axios from 'axios';
 // 获取预签名的 URL
 export const getSignedUrl = async (file: File) => {
   const response = await axios.get(
-    'https://ocr-go-backend-ksglcimcak.cn-beijing.fcapp.run/get-presign',
+    'https://ocr-backend.sanbei101.tech/get-presign',
     {
       params: { objectName: file.name }
     }
